@@ -39,7 +39,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let data_clone = Arc::clone(&data);
     let btc_price_clone = Arc::clone(&btc_price);
 
-    let mut task_index = 3; // Use a counter to rotate between tasks
     let mut btc_counter = 15; // Counter for 15-minute intervals
 
     // Background task for updating the data every minute
