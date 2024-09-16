@@ -1,0 +1,26 @@
+[package]
+name = "yum-webserver"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+actix = "0.13.5"
+actix-web = "4.9.0"
+env_logger = "0.11.5"
+log = "0.4.22"
+serde_json = "1.0.128"
+tokio = { version = "1.40.0", features = ["full"] }
+dotenv = { version = "*" }
+
+[profile.release]
+opt-level = 3
+lto = true
+
+[[bin]]
+name = "yum-webserver"
+path = "src/main.rs"
+
+# Add windows subsystem here for no console window
+[package.metadata]
+windows_subsystem = "windows"
