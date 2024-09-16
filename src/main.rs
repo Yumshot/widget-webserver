@@ -1,98 +1,135 @@
-#![windows_subsystem = "windows"]
-
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use dotenv::dotenv;
-use std::env;
+use bitcoin::functions::get_btc_price;
 use std::error::Error;
-use std::process::Command;
-use std::str;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
+use stocks::functions::check_stock_symbol;
+use tokio::sync::Mutex;
 use tokio::time::sleep;
+use twitch::functions::check_if_channel_live;
+use weather::functions::check_weather;
 
-// The shared mutable state that will hold the Bitcoin price
-type BtcPrice = Arc<Mutex<String>>;
+// Declare the bitcoin module
+mod bitcoin {
+    pub mod functions;
+}
+
+// Declare the twitch module
+mod twitch {
+    pub mod functions;
+}
+
+mod weather {
+    pub mod functions;
+}
+
+mod stocks {
+    pub mod functions;
+}
+
+// Shared state types for data and switch control
+type SharedData = Arc<Mutex<String>>;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // Shared mutable variable to store the Bitcoin price
-    let btc_price = Arc::new(Mutex::new(String::new()));
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let data = Arc::new(Mutex::new(String::new()));
+    let btc_price = Arc::new(Mutex::new(String::new())); // Variable to store Bitcoin price
 
-    // Clone the Arc to use inside the task that updates the price
-    let btc_price_updater = Arc::clone(&btc_price);
+    let data_clone = Arc::clone(&data);
+    let btc_price_clone = Arc::clone(&btc_price);
 
-    // Spawn a background task that updates the Bitcoin price every 15 minutes
+    let mut task_index = 3; // Use a counter to rotate between tasks
+    let mut btc_counter = 15; // Counter for 15-minute intervals
+
+    // Background task for updating the data every minute
     tokio::spawn(async move {
         loop {
-            match get_btc_price() {
-                Ok(price) => {
-                    let mut btc_price_locked = btc_price_updater.lock().unwrap();
-                    *btc_price_locked = price;
-                    println!("Updated Bitcoin price: {}", *btc_price_locked);
+            match task_index {
+                0 => {
+                    // Check if we should query Bitcoin price (every 15 minutes)
+                    if btc_counter >= 15 {
+                        // Check Bitcoin Module
+                        match get_btc_price().await {
+                            Ok(price) => {
+                                let mut btc_price_locked = btc_price_clone.lock().await;
+                                *btc_price_locked = price.clone();
+                                println!("Updated BTC data: ${}", price);
+                                btc_counter = 0; // Reset the counter after fetching
+                            }
+                            Err(e) => eprintln!("Error fetching Bitcoin price: {}", e),
+                        }
+                    } else {
+                        // Use the last stored Bitcoin price if within 15 minutes
+                        let btc_price_locked = btc_price_clone.lock().await;
+                        let mut data_locked = data_clone.lock().await;
+                        *data_locked = format!("STATUS: ₿: ${}", *btc_price_locked);
+                        println!("Using stored BTC data: ${}", *btc_price_locked);
+                    }
                 }
-                Err(e) => eprintln!("Error fetching Bitcoin price: {}", e),
+                1 => {
+                    // Check Twitch Module
+                    match check_if_channel_live().await {
+                        Ok(status) => {
+                            let mut data_locked = data_clone.lock().await;
+                            *data_locked = format!("STATUS: MR K LIVE?: {}", status);
+                            println!("Updated Twitch data");
+                        }
+                        Err(e) => eprintln!("Error checking Twitch live status: {}", e),
+                    }
+                }
+                2 => {
+                    // Check Weather Module
+                    match check_weather().await {
+                        Ok(result) => {
+                            let mut data_locked = data_clone.lock().await;
+                            *data_locked = format!("STATUS: Temp: {}°F", result);
+                        }
+                        Err(e) => eprintln!("Error in Weather function: {}", e),
+                    }
+                }
+                3 => {
+                    // Stock Symbol Module
+                    match check_stock_symbol().await {
+                        Ok(result) => {
+                            let mut data_locked = data_clone.lock().await;
+                            *data_locked = format!("STATUS: S&P500: ${}", result);
+                        }
+                        Err(e) => eprintln!("Error in Stock Function: {}", e),
+                    }
+                }
+                _ => (),
             }
 
-            // Wait for 15 minutes before the next request
-            sleep(Duration::from_secs(15 * 60)).await;
+            // Increment the counter for Bitcoin every minute
+            if task_index == 0 {
+                btc_counter += 1;
+            }
+
+            // Cycle through tasks
+            task_index = (task_index + 1) % 3;
+
+            // Sleep for a minute before checking again
+            sleep(Duration::from_secs(60)).await;
         }
     });
 
-    // Start the Actix web server
+    // Start the Actix web server with a single endpoint
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(Arc::clone(&btc_price))) // Pass the shared state to the Actix web server
-            .service(btc_price_endpoint) // Register the endpoint
+            .app_data(web::Data::new(Arc::clone(&data)))
+            .service(single_endpoint)
     })
-    .bind("0.0.0.0:8089")? // Bind to localhost:8089
+    .bind("0.0.0.0:8089")?
     .run()
     .await?;
 
     Ok(())
 }
 
-#[actix_web::get("/btc_price")]
-async fn btc_price_endpoint(btc_price: web::Data<BtcPrice>) -> impl Responder {
-    // Lock the mutex to safely access the latest price
-    let btc_price_locked = btc_price.lock().unwrap();
-
-    // Return the latest Bitcoin price as a simple text response
-    HttpResponse::Ok().body(format!("PRICE: ₿: ${} end1", *btc_price_locked))
-}
-
-// Function to fetch the current price of Bitcoin
-fn get_btc_price() -> Result<String, Box<dyn Error>> {
-    // Define the API endpoint and symbol ID for Bitcoin (BTC/USD)
-    let url = "https://rest.coinapi.io/v1/quotes/BITSTAMP_SPOT_BTC_USD/current";
-    dotenv().ok();
-    let api_key = env::var("XCOINAPIKEY").expect("ANTHROPIC_API_KEY not set in .env file");
-
-    // Construct the curl command to fetch the current price of Bitcoin
-    let output = Command::new("curl")
-        .arg("-L") // Follow redirects
-        .arg(url) // API URL
-        .arg("-H")
-        .arg(format!("X-CoinAPI-Key: {}", api_key)) // API key header
-        .arg("-H")
-        .arg("Accept: application/json") // Set the Accept header to get JSON response
-        .output()?; // Execute the command
-
-    // Check if the command was successful
-    if output.status.success() {
-        // Parse the response as a UTF-8 string
-        let response = str::from_utf8(&output.stdout)?;
-
-        // Parse the response as JSON and extract the last trade price
-        let json_response: serde_json::Value = serde_json::from_str(response)?;
-        if let Some(last_trade_price) = json_response["last_trade"]["price"].as_f64() {
-            // Return the last trade price as a string
-            return Ok(last_trade_price.to_string());
-        }
-
-        Err("Failed to extract last_trade.price from the response.".into())
-    } else {
-        // If the request failed, return an error
-        let error_message = str::from_utf8(&output.stderr)?;
-        Err(format!("Failed to fetch Bitcoin price: {}", error_message).into())
-    }
+// Endpoint to serve the current data
+#[actix_web::get("/current_data")]
+async fn single_endpoint(data: web::Data<SharedData>) -> impl Responder {
+    let data_locked = data.lock().await;
+    println!("{:?}", data_locked);
+    HttpResponse::Ok().body(format!("Current Info: {} end1", *data_locked))
 }
