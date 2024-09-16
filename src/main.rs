@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     match check_if_channel_live().await {
                         Ok(status) => {
                             let mut data_locked = data_clone.lock().await;
-                            *data_locked = format!("STATUS: MR K LIVE?: {}", status);
+                            *data_locked = format!("STATUS: MR K 💻: {}", status);
                             println!("Updated Twitch data");
                         }
                         Err(e) => eprintln!("Error checking Twitch live status: {}", e),
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     match check_weather().await {
                         Ok(result) => {
                             let mut data_locked = data_clone.lock().await;
-                            *data_locked = format!("STATUS: Temp: {}°F", result);
+                            *data_locked = format!("STATUS: 🌡️: {}°F", result);
                         }
                         Err(e) => eprintln!("Error in Weather function: {}", e),
                     }
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     match check_stock_symbol().await {
                         Ok(result) => {
                             let mut data_locked = data_clone.lock().await;
-                            *data_locked = format!("STATUS: S&P500: ${}", result);
+                            *data_locked = format!("STATUS: 🏛️S&P500: ${}", result);
                         }
                         Err(e) => eprintln!("Error in Stock Function: {}", e),
                     }

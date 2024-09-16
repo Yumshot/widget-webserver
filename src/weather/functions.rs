@@ -31,10 +31,7 @@ pub async fn check_weather() -> Result<String, Box<dyn Error + Send + Sync>> {
 
     // Safely access and return the temperature for the current hour
     if let Some(temperature) = temperatures.get(current_hour) {
-        Ok(format!(
-            "Temperature at {}:00 is: {}°F",
-            current_hour, temperature
-        ))
+        Ok(format!("{}", temperature))
     } else {
         Ok("No temperature data available for the current hour.".to_string())
     }
