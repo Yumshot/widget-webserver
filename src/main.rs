@@ -1,3 +1,4 @@
+//#![windows_subsystem = "windows"]
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use bitcoin::functions::get_btc_price;
 use std::error::Error;
