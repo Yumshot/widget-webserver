@@ -2,7 +2,7 @@
 name = "yum-webserver"
 version = "0.1.0"
 edition = "2021"
-# build = "build.rs"
+build = "build.rs"
 
 [dependencies]
 actix = "0.13.5"
@@ -14,15 +14,16 @@ tokio = { version = "1.40.0", features = ["full"] }
 dotenv = { version = "*" }
 reqwest = { version = "0.12.7", features = ["json"] }
 chrono = "0.4"
+sysinfo = "0.31.4"
 
-# [profile.release]
-# opt-level = 3
-# lto = true
+[profile.release]
+opt-level = 3
+lto = true
 
-# [[bin]]
-# name = "yum-webserver"
-# path = "src/main.rs"
+[[bin]]
+name = "yum-webserver"
+path = "src/main.rs"
 
-# # Add windows subsystem here for no console window
-# [package.metadata]
-# windows_subsystem = "windows"
+# Add windows subsystem here for no console window
+[package.metadata]
+windows_subsystem = "windows"

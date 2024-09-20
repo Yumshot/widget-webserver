@@ -1,5 +1,5 @@
-//#![windows_subsystem = "windows"]
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+#![windows_subsystem = "windows"]
+use actix_web::{ web, App, HttpResponse, HttpServer, Responder };
 use bitcoin::functions::get_btc_price;
 use std::error::Error;
 use std::sync::Arc;
@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 use twitch::functions::check_if_channel_live;
 use weather::functions::check_weather;
+use system::functions::gather_system_info;
 
 // Declare the bitcoin module
 mod bitcoin {
@@ -28,6 +29,10 @@ mod stocks {
     pub mod functions;
 }
 
+mod system {
+    pub mod functions;
+}
+
 // Shared state types for data and switch control
 type SharedData = Arc<Mutex<String>>;
 
@@ -39,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let data_clone = Arc::clone(&data);
     let btc_price_clone = Arc::clone(&btc_price);
 
-    let mut task_index = 1; // Use a counter to rotate between tasks
+    let mut task_index = 4; // Use a counter to rotate between tasks
     let mut btc_counter = 15; // Counter for 15-minute intervals
 
     // Background task for updating the data every minute
@@ -54,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             Ok(price) => {
                                 let mut btc_price_locked = btc_price_clone.lock().await;
                                 *btc_price_locked = price.clone();
-                                println!("Updated BTC data: ${}", price);
+                                // println!("Updated BTC data: ${}", price);
                                 btc_counter = 0; // Reset the counter after fetching
                             }
                             Err(e) => eprintln!("Error fetching Bitcoin price: {}", e),
@@ -64,7 +69,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         let btc_price_locked = btc_price_clone.lock().await;
                         let mut data_locked = data_clone.lock().await;
                         *data_locked = format!("STATUS: ₿: ${}", *btc_price_locked);
-                        println!("Using stored BTC data: ${}", *btc_price_locked);
+                        // println!("Using stored BTC data: ${}", *btc_price_locked);
                     }
                 }
                 1 => {
@@ -73,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         Ok(status) => {
                             let mut data_locked = data_clone.lock().await;
                             *data_locked = format!("STATUS: MR K 💻: {}", status);
-                            println!("Updated Twitch data");
+                            // println!("Updated Twitch data");
                         }
                         Err(e) => eprintln!("Error checking Twitch live status: {}", e),
                     }
@@ -98,6 +103,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         Err(e) => eprintln!("Error in Stock Function: {}", e),
                     }
                 }
+                4 => {
+                    // Stock Symbol Module
+                    match gather_system_info().await {
+                        Ok(result) => {
+                            let mut data_locked = data_clone.lock().await;
+                            *data_locked = format!("STATUS: {}", result);
+                        }
+                        Err(e) => eprintln!("Error in Stock Function: {}", e),
+                    }
+                }
                 _ => (),
             }
 
@@ -107,8 +122,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
 
             // Cycle through tasks
-            task_index = (task_index + 1) % 3;
-
+            task_index = task_index + 1;
+            if task_index > 4 {
+                task_index = 0;
+            }
             // Sleep for a minute before checking again
             sleep(Duration::from_secs(60)).await;
         }
@@ -120,9 +137,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(web::Data::new(Arc::clone(&data)))
             .service(single_endpoint)
     })
-    .bind("0.0.0.0:8089")?
-    .run()
-    .await?;
+        .bind("0.0.0.0:8089")?
+        .run().await?;
 
     Ok(())
 }
@@ -131,6 +147,5 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 #[actix_web::get("/current_data")]
 async fn single_endpoint(data: web::Data<SharedData>) -> impl Responder {
     let data_locked = data.lock().await;
-    println!("{:?}", data_locked);
     HttpResponse::Ok().body(format!("Current Info: {} end1", *data_locked))
 }
