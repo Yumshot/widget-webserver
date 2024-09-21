@@ -16,9 +16,9 @@ pub async fn gather_system_info() -> Result<String, Box<dyn Error + Send + Sync>
     // Gather system info and add to targets vector
     targets.push(
         format!(
-            "Total Memory: {} MB | Used Memory: {} MB",
-            sys.total_memory() / 1024 / 1024,
-            sys.used_memory() / 1024 / 1024
+            "Total Memory: {} GB | Used Memory: {} GB",
+            sys.total_memory() / 1024 / 1024 / 1024,
+            sys.used_memory() / 1024 / 1024 / 1024
         )
     );
     targets.push(System::host_name().unwrap_or_default().to_string());
@@ -27,10 +27,10 @@ pub async fn gather_system_info() -> Result<String, Box<dyn Error + Send + Sync>
     let networks = Networks::new_with_refreshed_list();
     for (interface_name, data) in &networks {
         let builder = format!(
-            "{}: {} B (down) / {} B (up)",
+            "{}: {} MB (down) / {} MB (up)",
             interface_name,
-            data.total_received(),
-            data.total_transmitted()
+            data.total_received() / 1024 / 1024,
+            data.total_transmitted() / 1024 / 1024
         );
         targets.push(builder);
     }
