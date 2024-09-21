@@ -15,6 +15,7 @@ dotenv = { version = "*" }
 reqwest = { version = "0.12.7", features = ["json"] }
 chrono = "0.4"
 sysinfo = "0.31.4"
+lazy_static = "1.5.0"
 
 [profile.release]
 opt-level = 3

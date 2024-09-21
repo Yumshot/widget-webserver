@@ -1,5 +1,11 @@
 use std::error::Error;
-use sysinfo::{ Disks, Networks, System };
+use std::sync::Mutex;
+use sysinfo::{ Networks, System };
+
+// Create a static mutable index wrapped in a Mutex for thread safety
+lazy_static::lazy_static! {
+    static ref ROTATION_INDEX: Mutex<usize> = Mutex::new(0);
+}
 
 // Async function to check stock symbol
 pub async fn gather_system_info() -> Result<String, Box<dyn Error + Send + Sync>> {
@@ -8,16 +14,14 @@ pub async fn gather_system_info() -> Result<String, Box<dyn Error + Send + Sync>
     let mut targets = Vec::new();
 
     // Gather system info and add to targets vector
-    targets.push(format!("Total Memory: {} MB", sys.total_memory() / 1024 / 1024));
-    targets.push(format!("Used Memory: {} MB", sys.used_memory() / 1024 / 1024));
+    targets.push(
+        format!(
+            "Total Memory: {} MB | Used Memory: {} MB",
+            sys.total_memory() / 1024 / 1024,
+            sys.used_memory() / 1024 / 1024
+        )
+    );
     targets.push(System::host_name().unwrap_or_default().to_string());
-
-    // We display all disks' information:
-    let disks = Disks::new_with_refreshed_list();
-    if disks.len() > 1 {
-        // Access the second disk
-        targets.push(format!("Disk space: {:?}", disks[1].total_space() / 1024 / 1024 / 1024));
-    }
 
     // Network interfaces name, total data received and total data transmitted:
     let networks = Networks::new_with_refreshed_list();
@@ -31,11 +35,15 @@ pub async fn gather_system_info() -> Result<String, Box<dyn Error + Send + Sync>
         targets.push(builder);
     }
 
-    // Rotate the first element to the back to change the first element on each call
-    if !targets.is_empty() {
-        // Moves the first element to the end, effectively rotating the list
-        targets.rotate_left(1);
-    }
+    // Rotate the index instead of the vector
+    let mut index = ROTATION_INDEX.lock().unwrap();
+    let current_item = targets
+        .get(*index % targets.len())
+        .unwrap()
+        .to_string();
+    *index += 1; // Increment the index for the next call
 
-    Ok(targets[0].to_string())
+    println!("{}", current_item);
+
+    Ok(current_item)
 }
