@@ -1,15 +1,15 @@
 #![windows_subsystem = "windows"]
-use actix_web::{ web, App, HttpResponse, HttpServer, Responder };
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use bitcoin::functions::get_btc_price;
 use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
 use stocks::functions::check_stock_symbol;
+use system::functions::gather_system_info;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use twitch::functions::check_if_channel_live;
 use weather::functions::check_weather;
-use system::functions::gather_system_info;
 
 // Declare the bitcoin module
 mod bitcoin {
@@ -137,8 +137,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(web::Data::new(Arc::clone(&data)))
             .service(single_endpoint)
     })
-        .bind("0.0.0.0:8089")?
-        .run().await?;
+    .bind("0.0.0.0:8089")?
+    .run()
+    .await?;
 
     Ok(())
 }
